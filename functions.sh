@@ -1,33 +1,61 @@
-# Global variables
+# JRMC Variables, typically loaded from ~/.jrmc-utils
 #     JRMC_HOST: the jrmc hostname
 #     JRMC_PORT: the port jrmc is listening on
-#     MCWS_AUTH_TOKEN: a current auth token obtained via MCWS Authenticate
-#     JRMC_CREDS: a .credentials file from which JRMC_USER and JRMC_PASS can be read
 #     JRMC_USER: username for JRMC MCWS connection
 #     JRMC_PASS: password for JRMC MCWS connection
+#     MCWS_AUTH_TOKEN: a current auth token obtained via MCWS Authenticate
 #
+# Cache Variables
+#     MEDIA_DIR: the dir containing the source material
+#     CACHE_DIR: the dir containing the converted copies of the source material
+#   
+# Device Variables, typically set by the sourcing script
+#     JRMC_PLAYLIST_PATH: the playlist path that defines the contents we will sync to the device
+#     HANDHELD_DEVICE: the device name
+#     HANDHELD_MOUNT: the mount point for the device
+#     HANDHELD_TARGET_DIR: the dir within the device to sync to (optional)
+#
+# Operational Variables
+#     ENCODER_MODE: mp3
+#     MP3_CONVERTER: lame, flac2all
+#     ENCODER_OPTS: -preset medium
 
-# loads JRMC_USER and JRMC_PASS from JRMC_CREDS
-# returns 0 if creds are set by the end of the call
-function load_creds {
-    if [[ -z "${JRMC_USER}" || -z "${JRMC_PASS}" ]]
+# verifies that all required config is loaded
+function validate_props {
+    local MISSING_PROPS=()
+    # check we can access JRMC
+    [[ -z "${JRMC_HOST}" ]] && MISSING_PROPS += ("JRMC_HOST")
+    [[ -z "${JRMC_PORT}" ]] && MISSING_PROPS += ("JRMC_PORT")
+    # check we have something to sync
+    [[ -z "${JRMC_PLAYLIST_PATH}" ]] && MISSING_PROPS += ("JRMC_PLAYLIST_PATH")
+    [[ -z "${HANDHELD_DEVICE}" ]] && MISSING_PROPS += ("HANDHELD_DEVICE")
+    [[ -z "${HANDHELD_MOUNT}" ]] && MISSING_PROPS += ("HANDHELD_MOUNT")
+    # check we have some files
+    [[ -z "${MEDIA_DIR}" ]] && MISSING_PROPS += ("MEDIA_DIR")
+    # check we have chosen a mode
+    [[ -z "${ENCODER_MODE}" ]] && MISSING_PROPS += ("ENCODER_MODE")
+    [[ -z "${ENCODER_OPTS}" ]] && MISSING_PROPS += ("ENCODER_OPTS")
+    
+    if [ "${#MISSING_PROPS[@]}" -gt 0 ]
     then
-        if [ -e "${JRMC_CREDS}" ]
-        then
-	    source "${JRMC_CREDS}"
-	else
-	    echo "Creds file ${JRMC_CREDS} does not exist"
-	    return 1
-        fi
+	echo "Unable to continue, missing properties are ${MISSING_PROPS[@]}"
+	exit 1
     fi
-    [[ -z "${JRMC_USER}" || -z "${JRMC_PASS}" ]] && return 1 || return 0
+}
+
+function validate_tools {
+    # use hash to test that lame etc are present
+}
+
+function validate_mounts {
+    [[ ! -d "${MEDIA_DIR}" ]] && echo "Media Dir (${MEDIA_DIR}) does not exist" && exit 1
+    [[ ! -d "${CACHE_DIR}" ]] && echo "Cache Dir (${CACHE_DIR}) does not exist" && exit 1
 }
 
 # Obtains an authentication token if one does not exist already
 function authenticate {
     if [ -z "${MCWS_AUTH_TOKEN}" ]
     then
-        load_creds
         MCWS_AUTH_TOKEN="$(curl -s -u ${JRMC_USER}:${JRMC_PASS} http://${JRMC_HOST}:${JRMC_PORT}/MCWS/v1/Authenticate | xmllint --xpath '/Response[@Status="OK"]/Item[@Name="Token"]/text()' - 2>/dev/null)"
     fi
 }
@@ -94,5 +122,17 @@ function do_dryrun_sync {
 }
 
 function do_sync {
-    rsync -rtv${1} --modify-window=1 ${2} ${3}
+    rsync -rtv${1} --modify-window=1 "${2}" "${3}"
 }
+
+# set/load default values 
+[[ -z "${JRMC_CONF_FILE}" ]] && "${HOME}/.jrmc-utils"
+[[ -e "${JRMC_CONF_FILE}" ]] && source "${JRMC_CONF_FILE}"
+[[ -z "${JRMC_PORT}" ]] && JRMC_PORT=52199
+[[ -z "${CACHE_DIR}" ]] && CACHE_DIR="/tmp/$$" && mkdir -p "/tmp/$$"
+[[ -z "${ENCODER_MODE}" ]] && ENCODER_MODE="mp3"
+[[ -z "${ENCODER_OPTS}" ]] && ENCODER_OPTS="-preset medium"
+
+validate_props
+validate_tools
+validate_mounts
