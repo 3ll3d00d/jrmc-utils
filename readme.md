@@ -15,28 +15,28 @@ Usage
 
 * Install the prerequisites (JRMC, python, flac2all, xmlstarlet)
 * Create a file containing the following properties, use your own paths
-
+    
     JRMC_UTILS_DIR=/home/matt/github/jrmc-utils
     MEDIA_SRC_DIR=/media/music
     FLAC2ALL_DIR=/opt/flac2all/stable
-
+    
     MEDIA_CACHE_DIR=/home/matt/test/cache
     JRMC_PLAYLIST_PATH="Devices\Alice\Sandisk Clip Sport - Main - Audiobook"
     HANDHELD_MOUNT=/mount/handheld/car
     HANDHELD_TARGET_DIR=/
     
 * Create a creds file ~/.jrmc-utils containing entries for
-
+    
     JRMC_HOST=
     JRMC_PORT=
     JRMC_USER=
     JRMC_PASS=
     JRMC_MAC=
-
+    
 * Call sync.sh passing the file name referenced in step 2
-
+    
     sync.sh /path/to/mysync.conf
-
+    
 
 TODO
 ----
