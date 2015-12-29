@@ -182,12 +182,12 @@ function create_target_device_links {
 
 # rsyncs from A to B in dryrun mode
 function do_dryrun_sync {
-    do_sync "n" "${1}" "${2}"
+    do_sync "n"
 }
 
 # rsyncs from A to B
 function do_sync {
-    rsync -rtv${1} --modify-window=1 "${2}" "${3}"
+    rsync -rtvL${1} --modify-window=1  "${CACHE_DIR}/target/" "${HANDHELD_MOUNT}/${HANDHELD_TARGET_DIR}/"
 }
 
 function calculate_free_space {
