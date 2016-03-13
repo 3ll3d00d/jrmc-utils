@@ -56,7 +56,7 @@ function validate_tools {
     hash xmlstarlet 2>/dev/null || (echo "xmlstarlet is required" && exit 1)
     [[ -d "${FLAC2ALL_DIR}" && -e "${FLAC2ALL_DIR}/flac2all.py" ]] || (echo "flac2all is required" && exit 1)
     hash python 2>/dev/null || (echo "python is required" && exit 1)
-    if hash wakeonlan 2>/dev/null && -n "${JRMC_MAC}"
+    if hash wakeonlan 2>/dev/null && [ -n "${JRMC_MAC}" ]
     then
 	export NO_WOL=0
     else
