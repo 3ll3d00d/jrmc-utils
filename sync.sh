@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 if [ -n "${1}" ]
 then
     echo "Loading sync config from ${1}"

@@ -118,7 +118,7 @@ function get_playlist_id {
 
 # calls mcws to get the files in a given playlist id and dumps that as an m3u
 function get_playlist_as_m3u {
-    curl -s "http://${JRMC_HOST}:${JRMC_PORT}/MCWS/v1/Playlist/Files?Playlist=${JRMC_PLAYLIST_ID}&Fields=Filename&Token=${MCWS_AUTH_TOKEN}" | xmlstarlet sel -t -m '/MPL/Item/Field[@Name="Filename"]' -v "text()" -n - > "${CACHE_DIR}/mcws.m3u"
+    curl -s "http://${JRMC_HOST}:${JRMC_PORT}/MCWS/v1/Playlist/Files?Playlist=${JRMC_PLAYLIST_ID}&Fields=Filename&Token=${MCWS_AUTH_TOKEN}" | xmlstarlet sel -t -m '/MPL/Item/Field[@Name="Filename"]' -v "text()" -n - | xmlstarlet unesc > "${CACHE_DIR}/mcws.m3u"
     return $?
 }
 
@@ -127,7 +127,7 @@ function get_playlist_as_m3u {
 function unixify_m3u {
     pushd "${CACHE_DIR}" > /dev/null 2>&1
     # TODO convert this to handle multiple paths
-    sed "s~${1}~${MEDIA_SRC_DIR}~g" "${CACHE_DIR}/mcws.m3u" | sed 's~\\~\/~g' > "${CACHE_DIR}/unix.m3u"
+    sed "s~${1}~${MEDIA_SRC_DIR}~gI" "${CACHE_DIR}/mcws.m3u" | sed 's~\\~\/~g' > "${CACHE_DIR}/unix.m3u"
     popd > /dev/null 2>&1
 }
 
@@ -165,7 +165,7 @@ function populate_conversion_cache {
 
 # creates the target device from the cache dir
 function create_target_device_links {
-    for RELATIVE_SOURCE_FILE in $(find ../source -name \*.flac | sed 's~../source/~~g' )
+    for RELATIVE_SOURCE_FILE in $(find ../source -name \*.flac -o -name \*.mp3 | sed 's~../source/~~g' )
     do
 	local RELATIVE_TARGET_FILE="${RELATIVE_SOURCE_FILE/flac/mp3}"
 	local SOURCE_FILE="${MEDIA_SRC_DIR}/${RELATIVE_SOURCE_FILE}"
