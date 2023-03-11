@@ -8,7 +8,7 @@
 # Cache Variables
 #     MEDIA_SRC_DIR: the dir containing the source material
 #     MEDIA_CACHE_DIR: the dir containing the converted copies of the source material
-#   
+#
 # Device Variables, typically set by the sourcing script
 #     JRMC_PLAYLIST_PATH: the playlist path that defines the contents we will sync to the device
 #     HANDHELD_MOUNT: the mount point for the device
@@ -22,9 +22,9 @@
 trap "clean_cache" EXIT
 
 function clean_cache {
-    if [[ -d "${CACHE_DIR}" && "${CLEAN_ON_EXIT}" -eq 1 ]] 
+    if [[ -d "${CACHE_DIR}" && "${CLEAN_ON_EXIT}" -eq 1 ]]
     then
-	rm -Rf "${CACHE_DIR}"
+        rm -Rf "${CACHE_DIR}"
     fi
 }
 
@@ -44,11 +44,11 @@ function validate_props {
     [[ -z "${ENCODER_MODE}" ]] && MISSING_PROPS+=("ENCODER_MODE")
     [[ -z "${ENCODER_OPTS}" ]] && MISSING_PROPS+=("ENCODER_OPTS")
     [[ -z "${FLAC2ALL_DIR}" ]] && MISSING_PROPS+=("FLAC2ALL_DIR")
-    
+
     if [ "${#MISSING_PROPS[@]}" -gt 0 ]
     then
-	echo "Unable to continue, missing properties are ${MISSING_PROPS[@]}"
-	exit 1
+        echo "Unable to continue, missing properties are ${MISSING_PROPS[@]}"
+        exit 1
     fi
 }
 
@@ -58,10 +58,10 @@ function validate_tools {
     hash python 2>/dev/null || (echo "python is required" && exit 1)
     if hash wakeonlan 2>/dev/null && [ -n "${JRMC_MAC}" ]
     then
-	export NO_WOL=0
+        export NO_WOL=0
     else
-	echo "wakeonlan is not available"
-	export NO_WOL=1
+        echo "wakeonlan is not available"
+        export NO_WOL=1
     fi
 }
 
@@ -78,9 +78,9 @@ function authenticate {
     if [ -z "${MCWS_AUTH_TOKEN}" ]
     then
         export MCWS_AUTH_TOKEN="$(curl -s -u ${JRMC_USER}:${JRMC_PASS} http://${JRMC_HOST}:${JRMC_PORT}/MCWS/v1/Authenticate | xmllint --xpath '/Response[@Status="OK"]/Item[@Name="Token"]/text()' - 2>/dev/null)"
-	return $?
+        return $?
     else
-	return 0
+        return 0
     fi
 }
 
@@ -89,24 +89,24 @@ function ensure_jrmc_alive {
     local PING_HIT=0
     while [[ "${COUNTER}" -lt 30 && "${PING_HIT}" -eq 0 ]]
     do
-	local RESULTS="$(ping -W 1 -c 1 "${JRMC_HOST}" 2>/dev/null)"
-	if [[ $? -ne 0 && ${COUNTER} -eq 0 ]]
-	then
-	    echo "Unable to ping ${JRMC_HOST}"
-	fi
+        local RESULTS="$(ping -W 1 -c 1 "${JRMC_HOST}" 2>/dev/null)"
+        if [[ $? -ne 0 && ${COUNTER} -eq 0 ]]
+        then
+            echo "Unable to ping ${JRMC_HOST}"
+        fi
         local PING_HIT=$(echo "${RESULTS}" | grep "from ${JRMC_HOST}" | wc -l)
-	if [ "${PING_HIT}" -eq 0 ]
-	then
-	    [[ $((COUNTER%5)) -eq 0 ]] && do_wol
-	fi
-	COUNTER=$((COUNTER+1))
+        if [ "${PING_HIT}" -eq 0 ]
+        then
+            [[ $((COUNTER%5)) -eq 0 ]] && do_wol
+        fi
+        COUNTER=$((COUNTER+1))
     done
 }
 
 function do_wol {
     if [[ "${NO_WOL}" -eq 0 ]]
     then
-	wakeonlan "${JRMC_MAC}"
+        wakeonlan "${JRMC_MAC}"
     fi
 }
 
@@ -137,10 +137,10 @@ function create_source_device {
     pushd "${CACHE_DIR}/source" > /dev/null 2>&1
     while IFS='' read -r m3u_entry || [[ -n "${m3u_entry}" ]]
     do
-	local RELATIVE_PATH="${m3u_entry/${MEDIA_SRC_DIR}\//}"
-	local DIR_NAME="${RELATIVE_PATH%/*}"
-	local FILE_NAME="${RELATIVE_PATH##*/}"
-	mkdir -p "${DIR_NAME}"
+        local RELATIVE_PATH="${m3u_entry/${MEDIA_SRC_DIR}\//}"
+        local DIR_NAME="${RELATIVE_PATH%/*}"
+        local FILE_NAME="${RELATIVE_PATH##*/}"
+        mkdir -p "${DIR_NAME}"
         ln -s "${m3u_entry}" "${RELATIVE_PATH}"
     done < "../unix.m3u"
     local BROKEN_LINKS=$(find . -xtype l | wc -l)
@@ -167,16 +167,16 @@ function populate_conversion_cache {
 function create_target_device_links {
     for RELATIVE_SOURCE_FILE in $(find ../source -name \*.flac -o -name \*.mp3 | sed 's~../source/~~g' )
     do
-	local RELATIVE_TARGET_FILE="${RELATIVE_SOURCE_FILE/flac/mp3}"
-	local SOURCE_FILE="${MEDIA_SRC_DIR}/${RELATIVE_SOURCE_FILE}"
-	local CACHED_FILE="${MEDIA_CACHE_DIR}/${RELATIVE_TARGET_FILE}"
+        local RELATIVE_TARGET_FILE="${RELATIVE_SOURCE_FILE/flac/mp3}"
+        local SOURCE_FILE="${MEDIA_SRC_DIR}/${RELATIVE_SOURCE_FILE}"
+        local CACHED_FILE="${MEDIA_CACHE_DIR}/${RELATIVE_TARGET_FILE}"
         if [ ! -e "${CACHED_FILE}" ]
         then
             echo "ERROR! ${CACHED_FILE} does not exist"
-	else
-    	    mkdir -p "${RELATIVE_TARGET_FILE%/*}"
+        else
+            mkdir -p "${RELATIVE_TARGET_FILE%/*}"
             ln -s "${CACHED_FILE}" "${RELATIVE_TARGET_FILE}"
-	fi
+        fi
     done
 }
 

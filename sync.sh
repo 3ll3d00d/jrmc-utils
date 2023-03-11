@@ -1,4 +1,10 @@
 #!/bin/bash
+
+if [[ -z "${JRMC_UTILS_DIR}" ]]
+then
+  JRMC_UTILS_DIR="."
+fi
+
 if [ -n "${1}" ]
 then
     echo "Loading sync config from ${1}"
