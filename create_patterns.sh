@@ -134,7 +134,7 @@ mkdir -p checker
 mkdir -p MP4
 
 echo "" > ffmpeg_debug.txt
-echo -e "file\tactual\texpected" > checker/verify.txt
+echo -e "mp4\tsample\tactual\texpected" > checker/verify.txt
 echo "# mp4 concat $(pwd)" > ffmpeg_input.txt
 echo -e "file\trgb" > debug.txt
 LAST_IMG_COLOUR=
