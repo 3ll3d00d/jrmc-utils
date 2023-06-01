@@ -1,4 +1,20 @@
 #!/bin/bash 
+function to_8 {
+  local DIVISOR=$(echo "2 ^ (${BIT_DEPTH} - 8)" | bc)
+  if [[ ${BIT_DEPTH} -eq 8 ]]
+  then
+    echo "${1}"
+  else
+    local V="$(printf '%.0f' $(echo "(${1}/${DIVISOR})"| bc -l))"
+    if [[ ${V} -eq 256 ]]
+    then
+      echo "255"
+    else
+      echo "${V}"
+    fi
+  fi
+}
+
 function colour_name {
     if [[ ${1} =~ ([[:digit:]]{1,5}),([[:digit:]]{1,5}),([[:digit:]]{1,5}) ]]
     then
@@ -16,7 +32,6 @@ function colour_name {
         echo "${1}"
     fi  
 }
-
 
 function check_output {
     if [[ ${1} != ${2} ]]
@@ -39,13 +54,45 @@ function check_output {
     fi
 }
 
+function as_grey {
+  echo "$(printf '%.0f' $(echo "(0.299 * ${1}) + (0.587 * ${2}) + (0.114 * ${3})" | bc -l))"
+}
+
+function text_colour {
+  if [[ ${1} =~ ([[:digit:]]{1,5}),([[:digit:]]{1,5}),([[:digit:]]{1,5}) ]]
+  then
+    local R=$(to_8 ${BASH_REMATCH[1]})
+    local G=$(to_8 ${BASH_REMATCH[2]})
+    local B=$(to_8 ${BASH_REMATCH[3]})
+    local GREY=$(as_grey ${R} ${G} ${B})
+    if [[ ${GREY} -lt 128 ]]
+    then
+      local TXT_GREY=$((GREY + 80))
+    else
+      local TXT_GREY=$((GREY - 80))
+    fi
+    echo "${R},${G},${B}|$(echo $(printf '0x%02x%02x%02x' "${TXT_GREY}" "${TXT_GREY}" "${TXT_GREY}"))" 
+  else
+    echo "ERROR: Invalid input ${1}"
+    exit 1
+  fi
+}
+
 function gen {
     local IMG_IDX=${1}
     local IMG_COLOUR=${2}
     local IMG_DURATION=${3}
     local IMG_FILE=${4}
     local COLOUR_NAME=$(colour_name ${IMG_COLOUR})
-    echo -e "${IMG_IDX}\t${IMG_COLOUR}\t${COLOUR_NAME}\t${IMG_DURATION}\t${IMG_FILE}"
+    local VALS=$(text_colour ${IMG_COLOUR})
+    local COLOUR_TXT=${VALS%|*}
+    local TXT_COLOUR=${VALS#*|}
+    if [[ ${COLOUR_NAME} == ${IMG_COLOUR} ]]
+    then
+      COLOUR_NAME=${COLOUR_TXT}
+    fi
+    local OVERLAY="${IMG_IDX} - ${COLOUR_NAME}"
+    echo -e "${IMG_IDX}\t${IMG_FILE}\t${IMG_DURATION}\t${IMG_COLOUR}\t${COLOUR_NAME}"
     LFN=$(basename ${IMG_FILE})
     MP4_NAME=MP4/"${LFN%.*}".mp4
     if [[ ${DRY_RUN} -eq 0 ]]
@@ -55,14 +102,12 @@ function gen {
         then
           ENABLE_EXPR=":enable='between(t,0,8)'"
         fi
-        local TXT_COLOUR="Gray"
-        # Gray in ffmpeg is 50% so if we have a direct match then avoid it
-        [[ "${COLOUR_NAME}" == "50%" ]] && TXT_COLOUR="0x696969"
         convert -resize 1920x1080\! "${IMG_FILE}" "PNG48:HD/${LFN}"
-        local OVERLAY="${IMG_IDX} - ${COLOUR_NAME}"
+
         local START=$(date +%s.%3N)
         ffmpeg -y -loop 1 -i "HD/${LFN}" -c:v libx265 -t ${IMG_DURATION} -vf "colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10, drawtext=text='${OVERLAY}':fontcolor=${TXT_COLOUR}:x=40:y=h-th-40${ENABLE_EXPR}:expansion=none:fontsize=36" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags "accurate_rnd+full_chroma_int" "${MP4_NAME}" >> ffmpeg_debug.txt 2>&1
         local END=$(date +%s.%3N)
+        
         local ENCODE_TIME_SECS=$(echo "${END} - ${START}" | bc -l)
         echo "Encode time: ${ENCODE_TIME_SECS}s"
         if [[ $? -ne 0 ]]
