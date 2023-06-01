@@ -60,7 +60,11 @@ function gen {
         [[ "${COLOUR_NAME}" == "50%" ]] && TXT_COLOUR="0x696969"
         convert -resize 1920x1080\! "${IMG_FILE}" "PNG48:HD/${LFN}"
         local OVERLAY="${IMG_IDX} - ${COLOUR_NAME}"
+        local START=$(date +%s.%3N)
         ffmpeg -y -loop 1 -i "HD/${LFN}" -c:v libx265 -t ${IMG_DURATION} -vf "colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10, drawtext=text='${OVERLAY}':fontcolor=${TXT_COLOUR}:x=40:y=h-th-40${ENABLE_EXPR}:expansion=none:fontsize=36" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags "accurate_rnd+full_chroma_int" "${MP4_NAME}" >> ffmpeg_debug.txt 2>&1
+        local END=$(date +%s.%3N)
+        local ENCODE_TIME_SECS=$(echo "${END} - ${START}" | bc -l)
+        echo "Encode time: ${ENCODE_TIME_SECS}s"
         if [[ $? -ne 0 ]]
         then
             echo "Failed to encode ${MP4_NAME}"
@@ -68,7 +72,7 @@ function gen {
             local CHECK_PNG="checker/${LFN%%.*}.png"
             ffmpeg -y -i "${MP4_NAME}" -frames:v 1 -vf scale=out_color_matrix=srgb=full_chroma_int+accurate_rnd,format=rgb48le ${CHECK_PNG} >> ffmpeg_debug.txt 2>&1
             local VID_RGB=$(convert ${CHECK_PNG} -crop 1x1+960+540 -depth ${BIT_DEPTH} -format "%[fx:int(${SCALE}*r+.5)],%[fx:int(${SCALE}*g+.5)],%[fx:int(${SCALE}*b+.5)]" info:-)
-            echo -e "${MP4_NAME}\t${CHECK_PNG}\t${VID_RGB}\t${IMG_COLOUR}" >> checker/verify.txt
+            echo -e "${MP4_NAME}\t${CHECK_PNG}\t${VID_RGB}\t${IMG_COLOUR}\t${ENCODE_TIME_SECS}" >> checker/verify.txt
             check_output ${IMG_COLOUR} ${VID_RGB}
         fi
     fi
@@ -134,7 +138,7 @@ mkdir -p checker
 mkdir -p MP4
 
 echo "" > ffmpeg_debug.txt
-echo -e "mp4\tsample\tactual\texpected" > checker/verify.txt
+echo -e "mp4\tsample\tactual\texpected\tencode_time" > checker/verify.txt
 echo "# mp4 concat $(pwd)" > ffmpeg_input.txt
 echo -e "file\trgb" > debug.txt
 LAST_IMG_COLOUR=
