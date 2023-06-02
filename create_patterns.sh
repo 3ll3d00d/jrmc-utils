@@ -82,6 +82,7 @@ function gen {
     local IMG_IDX=${1}
     local IMG_COLOUR=${2}
     local IMG_DURATION=${3}
+    [[ ${FIXED_SECS} -gt 0 ]] && IMG_DURATION=${FIXED_SECS}
     local IMG_FILE=${4}
     local COLOUR_NAME=$(colour_name ${IMG_COLOUR})
     local VALS=$(text_colour ${IMG_COLOUR})
@@ -137,7 +138,7 @@ EXTRA_SECS=2
 FIXED_SECS=0
 BIT_DEPTH=12
 
-while getopts ":ife:d:f:" opt; do
+while getopts ":ife:d:l:" opt; do
   case ${opt} in
     f )
       echo "Running in full update mode"
@@ -154,7 +155,7 @@ while getopts ":ife:d:f:" opt; do
         EXTRA_SECS=${OPTARG}
       fi
       ;;
-    f )
+    l )
       if [[ -n ${OPTARG} ]]
       then
         echo "Outputting fixed duration of ${OPTARG}s"
