@@ -211,14 +211,11 @@ if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e checker/verify.txt ]]
 then
   echo -e "mp4\tsample\tactual\texpected\tencode_time" > checker/verify.txt
 fi
-if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e ffmpeg_input.txt ]]
-then
-  echo "# mp4 concat $(pwd)" > ffmpeg_input.txt
-fi
 if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e debug.txt ]]
 then
   echo -e "file\trgb" > debug.txt
 fi
+echo "# mp4 concat $(pwd)" > ffmpeg_input.txt
 LAST_IMG_COLOUR=
 LAST_FILE_NAME=
 IMG_DURATION=0
