@@ -134,12 +134,13 @@ function gen {
 
 UPDATE_MODE=0
 EXTRA_SECS=2
+FIXED_SECS=0
 BIT_DEPTH=12
 
-while getopts ":ife:d:" opt; do
+while getopts ":ife:d:f:" opt; do
   case ${opt} in
     f )
-      echo "Switching off dry run mode"
+      echo "Running in full update mode"
       UPDATE_MODE=1
       ;;
     i )
@@ -151,6 +152,13 @@ while getopts ":ife:d:" opt; do
       then
         echo "Adding ${OPTARG}s to duration"
         EXTRA_SECS=${OPTARG}
+      fi
+      ;;
+    f )
+      if [[ -n ${OPTARG} ]]
+      then
+        echo "Outputting fixed duration of ${OPTARG}s"
+        FIXED_SECS=${OPTARG}
       fi
       ;;
     d )
@@ -175,6 +183,11 @@ then
     echo "error: -e must be a number not ${EXTRA_SECS}" >&2
     exit 1 
 fi
+if [[ ${FIXED_SECS} -ne 0 ]] && [[ ! "${FIXED_SECS}" =~ ^[0-9]+$ ]]
+then 
+    echo "error: -f must be a number not ${FIXED_SECS}" >&2
+    exit 1 
+fi
 SCALE=$(echo "2^${BIT_DEPTH} - 1" | bc)
 
 if [[ -n "${1}" ]]
@@ -190,10 +203,22 @@ mkdir -p HD
 mkdir -p checker
 mkdir -p MP4
 
-echo "" > ffmpeg_debug.txt
-echo -e "mp4\tsample\tactual\texpected\tencode_time" > checker/verify.txt
-echo "# mp4 concat $(pwd)" > ffmpeg_input.txt
-echo -e "file\trgb" > debug.txt
+if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e ffmpeg_debug.txt ]]
+then
+  echo "" > ffmpeg_debug.txt
+fi
+if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e checker/verify.txt ]]
+then
+  echo -e "mp4\tsample\tactual\texpected\tencode_time" > checker/verify.txt
+fi
+if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e ffmpeg_input.txt ]]
+then
+  echo "# mp4 concat $(pwd)" > ffmpeg_input.txt
+fi
+if [[ ${UPDATE_MODE} -ne 2 ]] || [[ ! -e debug.txt ]]
+then
+  echo -e "file\trgb" > debug.txt
+fi
 LAST_IMG_COLOUR=
 LAST_FILE_NAME=
 IMG_DURATION=0
