@@ -95,48 +95,56 @@ function gen {
     echo -e "${IMG_IDX}\t${IMG_FILE}\t${IMG_DURATION}\t${IMG_COLOUR}\t${COLOUR_NAME}"
     LFN=$(basename ${IMG_FILE})
     MP4_NAME=MP4/"${LFN%.*}".mp4
-    if [[ ${DRY_RUN} -eq 0 ]]
+    if [[ ${UPDATE_MODE} -ne 0 ]]
     then
         local ENABLE_EXPR=""
         if [[ ${IMG_DURATION} -gt 10 ]]
         then
           ENABLE_EXPR=":enable='between(t,0,8)'"
         fi
-        convert -resize 1920x1080\! "${IMG_FILE}" "PNG48:HD/${LFN}"
-
-        local START=$(date +%s.%3N)
-        ffmpeg -y -loop 1 -i "HD/${LFN}" -c:v libx265 -t ${IMG_DURATION} -vf "colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10, drawtext=text='${OVERLAY}':fontcolor=${TXT_COLOUR}:x=40:y=h-th-40${ENABLE_EXPR}:expansion=none:fontsize=36" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags "accurate_rnd+full_chroma_int" "${MP4_NAME}" >> ffmpeg_debug.txt 2>&1
-        local END=$(date +%s.%3N)
-        
-        local ENCODE_TIME_SECS=$(echo "${END} - ${START}" | bc -l)
-        echo "Encode time: ${ENCODE_TIME_SECS}s"
-        if [[ $? -ne 0 ]]
+        if [[ ${UPDATE_MODE} -eq 1 ]] || [[ ! -e "PNG48:HD/${LFN}" ]]
         then
-            echo "Failed to encode ${MP4_NAME}"
+          convert -resize 1920x1080\! "${IMG_FILE}" "PNG48:HD/${LFN}"
+        fi
+
+        if [[ ${UPDATE_MODE} -eq 1 ]] || [[ ! -e "${MP4_NAME}" ]]
+        then
+          local START=$(date +%s.%3N)
+          ffmpeg -y -loop 1 -i "HD/${LFN}" -c:v libx265 -t ${IMG_DURATION} -vf "colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10, drawtext=text='${OVERLAY}':fontcolor=${TXT_COLOUR}:x=40:y=h-th-40${ENABLE_EXPR}:expansion=none:fontsize=36" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags "accurate_rnd+full_chroma_int" "${MP4_NAME}" >> ffmpeg_debug.txt 2>&1
+          local END=$(date +%s.%3N)
+          
+          local ENCODE_TIME_SECS=$(echo "${END} - ${START}" | bc -l)
+          echo "Encode time: ${ENCODE_TIME_SECS}s"
+          if [[ $? -ne 0 ]]
+          then
+              echo "Failed to encode ${MP4_NAME}"
+          else
+              local CHECK_PNG="checker/${LFN%%.*}.png"
+              ffmpeg -y -i "${MP4_NAME}" -frames:v 1 -vf scale=out_color_matrix=srgb=full_chroma_int+accurate_rnd,format=rgb48le ${CHECK_PNG} >> ffmpeg_debug.txt 2>&1
+              local VID_RGB=$(convert ${CHECK_PNG} -crop 1x1+960+540 -depth ${BIT_DEPTH} -format "%[fx:int(${SCALE}*r+.5)],%[fx:int(${SCALE}*g+.5)],%[fx:int(${SCALE}*b+.5)]" info:-)
+              echo -e "${MP4_NAME}\t${CHECK_PNG}\t${VID_RGB}\t${IMG_COLOUR}\t${ENCODE_TIME_SECS}" >> checker/verify.txt
+              check_output ${IMG_COLOUR} ${VID_RGB}
+          fi
         else
-            local CHECK_PNG="checker/${LFN%%.*}.png"
-            ffmpeg -y -i "${MP4_NAME}" -frames:v 1 -vf scale=out_color_matrix=srgb=full_chroma_int+accurate_rnd,format=rgb48le ${CHECK_PNG} >> ffmpeg_debug.txt 2>&1
-            local VID_RGB=$(convert ${CHECK_PNG} -crop 1x1+960+540 -depth ${BIT_DEPTH} -format "%[fx:int(${SCALE}*r+.5)],%[fx:int(${SCALE}*g+.5)],%[fx:int(${SCALE}*b+.5)]" info:-)
-            echo -e "${MP4_NAME}\t${CHECK_PNG}\t${VID_RGB}\t${IMG_COLOUR}\t${ENCODE_TIME_SECS}" >> checker/verify.txt
-            check_output ${IMG_COLOUR} ${VID_RGB}
+          echo "Skipping, output exists"
         fi
     fi
     echo "file '${MP4_NAME}'" >> ffmpeg_input.txt
 }
 
-DRY_RUN=1
+UPDATE_MODE=0
 EXTRA_SECS=2
 BIT_DEPTH=12
 
-while getopts ":ine:s:" opt; do
+while getopts ":ife:d:" opt; do
   case ${opt} in
-    n )
+    f )
       echo "Switching off dry run mode"
-      DRY_RUN=0
+      UPDATE_MODE=1
       ;;
     i )
       echo "Running in incremental mode"
-      DRY_RUN=2
+      UPDATE_MODE=2
       ;;
     e )
       if [[ -n ${OPTARG} ]]
@@ -145,7 +153,7 @@ while getopts ":ine:s:" opt; do
         EXTRA_SECS=${OPTARG}
       fi
       ;;
-    s )
+    d )
       if [[ -n ${OPTARG} ]]
       then
         echo "Verifying in ${OPTARG} bits"
@@ -209,7 +217,7 @@ done
 IMG_COUNT=$((IMG_COUNT + 1))
 gen ${IMG_COUNT} ${LAST_IMG_COLOUR} ${IMG_DURATION} ${LAST_FILE_NAME}
 
-if [[ ${DRY_RUN} -eq 0 ]]
+if [[ ${UPDATE_MODE} -ne 0 ]]
 then
     echo "Concatenating all files into final output"
     ffmpeg -y -f concat -safe 0 -i ffmpeg_input.txt -c copy patterns.mp4  >> ffmpeg_debug.txt 2>&1

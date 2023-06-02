@@ -1,0 +1,57 @@
+create test chart in displaycal
+gamma
+* white patches: 1
+* single channel patches: 0
+* black patches: 1
+* neutral patches: n+1 (e.g. 20 point gamma set to 21)
+* dark region emphasis: 0
+* iterative patches: 0
+* create test chart
+* sort by rgb
+* export to png
+
+lut
+* run using madtpg and auto optimised chart
+* wait til it completes the preconditioning characterisation (34 point measurement)
+* pause the measurements
+* go to the most recently updated %LOCALAPPDATA%/Temp/DisplayCal-xxxxx (where xxxxx is some set of chars) folder
+* copy the files from here to some other location, there should be files with the following extensions
+  * cal
+  * icm (contains the preconditioning profile)
+  * log (contains information needed to know how to drive targen)
+  * ti1 
+  * ti3
+* review the log file to see the switches used to drive targen, e.g.
+
+targen.exe
+   -v
+   -d3
+   -e4
+   -s33
+   -g97
+   -m0
+   -f1519
+   -A1.0
+   -G
+   -N0.5
+   -B4
+   -b0
+   -V1.6
+   -c
+   "madVR 2023-05-31 10-24 0.3127x 0.329y S XYZLUT+MTX.icm"
+   "madVR 2023-05-31 10-24 0.3127x 0.329y S XYZLUT+MTX"
+
+* varying the size of the test chart is achieved by changing the following
+  * s : single channel steps
+  * g : grey axis steps
+  * f : patches
+
+* cancel the measurement
+* switch to untethered mode
+* open the testchart editor
+* update the various params to match the above settings inc adding the preconditioning profile (copied from temp)
+* sort by Maximize lightness difference” 
+* export to png 16bit
+* max repeats = 16
+* min repeats = 5
+
