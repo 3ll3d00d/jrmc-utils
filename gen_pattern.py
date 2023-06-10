@@ -6,7 +6,7 @@ import subprocess
 
 import math
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple, Callable
 
 import sys
 import time
@@ -22,6 +22,23 @@ def greyscale_percent(r: float, g: float, b: float) -> Optional[float]:
     return r if math.isclose(r, b) and math.isclose(g, b) else None
 
 
+def run_if_necessary(out_file: Path, force: bool, func: callable) -> str:
+    create = True
+    out_file_abs = out_file.absolute()
+    if out_file.exists():
+        create = force
+        if create:
+            logger.info(f'Recreating {out_file_abs}')
+        else:
+            logger.info(f'Reusing {out_file_abs}')
+    else:
+        logger.info(f'Creating {out_file_abs}')
+    if create:
+        func(out_file_abs)
+        out_file.resolve(strict=True)
+    return str(out_file_abs)
+
+
 def run_it(name: str, cmd: str, **kwargs) -> subprocess.CompletedProcess[str]:
     shlex.split(cmd)
     logger.debug(f'Executing {cmd}')
@@ -35,7 +52,8 @@ def run_it(name: str, cmd: str, **kwargs) -> subprocess.CompletedProcess[str]:
         raise e
 
 
-def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame_count: int) -> str:
+def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame_count: int, force: bool) -> Tuple[
+    str, Tuple[float, ...]]:
     gamma_percent = greyscale_percent(r, g, b)
     grey = as_grey(r, g, b)
 
@@ -54,20 +72,21 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
     patch_file_abs = str(patch_file.absolute())
 
     # create patch
-    logger.info(f'Creating {patch_file_abs}')
-    run_it('Patch generation', f'convert -size 1920x1080 xc:rgb\({im_colour}\) PNG48:{patch_file_abs}')
-    patch_file.resolve(strict=True)
+    patch_file_abs = run_if_necessary(patch_file,
+                                      force,
+                                      lambda f: run_it('Patch generation',
+                                                       f'convert -size 1920x1080 xc:rgb\({im_colour}\) PNG48:{f}'))
 
     # text overlay
     if gamma_percent:
-        text_overlay = f'{idx+1} - {round(gamma_percent * 100, 1):.4g}%'
+        text_overlay = f'{idx + 1} - {round(gamma_percent * 100, 1):.4g}%'
     else:
         # 8 bit for text overlay
         r_8 = round(r * 255)
         g_8 = round(g * 255)
         b_8 = round(b * 255)
 
-        text_overlay = f'{idx+1} - ({r_8},{g_8},{b_8})'
+        text_overlay = f'{idx + 1} - ({r_8},{g_8},{b_8})'
 
     # text colour
     if grey < 0.5:
@@ -79,25 +98,28 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
 
     # create video
     patch_vid = patch_cache_dir / f'{r_10}_{g_10}_{b_10}.mp4'
-    patch_vid_abs = str(patch_vid.absolute())
-    logger.info(f'Creating {patch_vid_abs}')
-    fps = 25
-    cmd = f"ffmpeg -y -framerate {fps} -i {patch_file_abs} -c:v libx265 -x265-params \"lossless=1\" -t {round(frame_count * (1.0 / fps), 3)} -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,drawtext=text='{text_overlay}':fontcolor={text_colour}:x=40:y=h-th-40:expansion=none:fontsize=36,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {patch_vid_abs}"
-    before = time.time()
-    run_it('MP4 generation', cmd)
-    after = time.time()
-    logger.info(f'Created {patch_vid_abs} in {round(after-before, 3)}s')
-    patch_vid.resolve(strict=True)
+
+    def do_it(f):
+        fps = 25
+        cmd = f"ffmpeg -y -framerate {fps} -i {patch_file_abs} -c:v libx265 -x265-params \"lossless=1\" -t {round(frame_count * (1.0 / fps), 3)} -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,drawtext=text='{text_overlay}':fontcolor={text_colour}:x=40:y=h-th-40:expansion=none:fontsize=36,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {f}"
+        before = time.time()
+        run_it('MP4 generation', cmd)
+        after = time.time()
+        logger.info(f'Created {f} in {round(after - before, 3)}s')
+
+    patch_vid_abs = run_if_necessary(patch_vid, force, do_it)
 
     # convert back to png
     patch_check = patch_cache_dir / f'{r_10}_{g_10}_{b_10}.check.png'
-    patch_check_abs = str(patch_check.absolute())
-    logger.info(f'Creating {patch_check_abs}')
-    run_it('Check png generation', f'ffmpeg -y -i {patch_vid_abs} -frames:v 1 -vf scale=out_color_matrix=srgb=full_chroma_int+accurate_rnd,format=rgb48le {patch_check_abs}')
-    patch_check.resolve(strict=True)
+    patch_check_abs = run_if_necessary(patch_check,
+                                       force,
+                                       lambda f: run_it('Check png generation',
+                                                        f'ffmpeg -y -i {patch_vid_abs} -frames:v 1 -vf scale=out_color_matrix=srgb=full_chroma_int+accurate_rnd,format=rgb48le {f}'))
 
     # read the patch
-    res = run_it('Check png parse', f"convert {patch_check_abs} -crop 1x1+960+540 -format '%[fx:r],%[fx:g],%[fx:b]' info:-", capture_output=True)
+    res = run_it('Check png parse',
+                 f"convert {patch_check_abs} -crop 1x1+960+540 -format '%[fx:r],%[fx:g],%[fx:b]' info:-",
+                 capture_output=True)
     out = res.stdout.decode().splitlines()
     check_rgb = [float(f) for f in out[0].split(',')]
 
@@ -114,15 +136,15 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
         delta_sum = abs(delta_r) + abs(delta_g) + abs(delta_b)
 
         if delta_sum == 0:
-            logger.info(f'MATCHED: {r_10},{g_10},{b_10}')
+            logger.info(f'RESULT: MATCHED: {r_10},{g_10},{b_10}')
         elif delta_sum < 4:
-            logger.info(f'ROUNDING {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
+            logger.info(f'RESULT: ROUNDING {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
         else:
-            logger.warning(f'ERROR {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
+            logger.warning(f'RESULT: ERROR {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
     else:
         raise ValueError(f'Failed to read RGB from {patch_check_abs}')
 
-    return patch_vid_abs
+    return patch_vid_abs, (r_10, g_10, b_10, check_r_10, check_g_10, check_b_10)
 
 
 def generate_pattern(patchset: str, path: Path, vids: List[str]):
@@ -133,7 +155,7 @@ def generate_pattern(patchset: str, path: Path, vids: List[str]):
             f.write(f"file '{vid}'\n")
     # create the vid
     patchset_vid = (path / f'{patchset}.mp4').absolute()
-    logger.info(f'Concatenating {len(vid)} patches into {patchset_vid}')
+    logger.info(f'Concatenating {len(vids)} patches into {patchset_vid}')
     run_it('Pattern gen', f'ffmpeg -y -f concat -safe 0 -i {ffmpeg_concat.absolute()} -c copy {patchset_vid}')
 
 
@@ -145,9 +167,10 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
     patch_def_name = f'{set_name}_100.csv'
     patch_def_file = path / patch_def_name
     patch_def_file.resolve(strict=True)
-    failed = 0
+    failed = []
     success = 0
     vids = []
+    rgbs: List[Tuple[float, ...]] = []
     with patch_def_file.open() as f:
         patch_reader = csv.reader(f)
         for row in patch_reader:
@@ -156,14 +179,22 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
             g = float(row[2]) / 100.0
             b = float(row[3]) / 100.0
             try:
-                vids.append(process_patch(idx, r, g, b, cache_dir, frame_count))
+                vid, rgb = process_patch(idx, r, g, b, cache_dir, frame_count, force)
+                vids.append(vid)
+                rgbs.append(rgb)
                 success = success + 1
             except:
-                failed = failed + 1
+                failed.append(idx)
 
     if failed:
-        raise ValueError(f'Failed to generate {failed} mp4, {success} completed ok')
+        raise ValueError(f'Failed to generate {len(failed)} mp4, {success} completed ok [{failed}]')
     else:
+        with (path / 'verify.csv').open(mode='w') as f:
+            v_csv = csv.writer(f)
+            v_csv.writerow(['idx', 'in_r', 'in_g', 'in_b', 'out_r', 'out_g', 'out_b'])
+            for i, rgb in enumerate(rgbs):
+                v_csv.writerow([i] + list(rgb))
+
         generate_pattern(set_name, path, vids)
         logger.info(f'Processed patchset: {patchset_path}')
 

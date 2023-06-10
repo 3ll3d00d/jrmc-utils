@@ -7,8 +7,9 @@ gamma
 * dark region emphasis: 0
 * iterative patches: 0
 * create test chart
-* sort by rgb
-* export to png
+* sort by Maximize lightness difference
+* save testchart (ti1)
+* export csv 0..100
 
 lut
 * run using madtpg and auto optimised chart
@@ -50,8 +51,7 @@ targen.exe
 * switch to untethered mode
 * open the testchart editor
 * update the various params to match the above settings inc adding the preconditioning profile (copied from temp)
-* sort by Maximize lightness difference” 
-* export to png 16bit
-* max repeats = 16
-* min repeats = 5
+* sort by Maximize lightness difference
+* save testchart (ti1)
+* export csv 0..100
 
