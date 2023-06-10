@@ -28,12 +28,12 @@ function colour_name {
       else
         echo "${1}"
       fi
-    else 
+    else
         echo "${1}"
-    fi  
+    fi
 }
 
-function check_output {
+function compare_colours {
     if [[ ${1} != ${2} ]]
     then
         local TXT="E ${1} vs A ${2}"
@@ -71,7 +71,7 @@ function text_colour {
     else
       local TXT_GREY=$((GREY - 80))
     fi
-    echo "${R},${G},${B}|$(echo $(printf '0x%02x%02x%02x' "${TXT_GREY}" "${TXT_GREY}" "${TXT_GREY}"))" 
+    echo "${R},${G},${B}|$(echo $(printf '0x%02x%02x%02x' "${TXT_GREY}" "${TXT_GREY}" "${TXT_GREY}"))"
   else
     echo "ERROR: Invalid input ${1}"
     exit 1
@@ -93,6 +93,15 @@ function gen {
       COLOUR_NAME=${COLOUR_TXT}
     fi
     local OVERLAY="${IMG_IDX} - ${COLOUR_NAME}"
+
+    if [[ ${IMG_COLOUR} =~ ([[:digit:]]{1,5}),([[:digit:]]{1,5}),([[:digit:]]{1,5}) ]]
+    then
+      local R=$(to_8 ${BASH_REMATCH[1]})
+      local G=$(to_8 ${BASH_REMATCH[2]})
+      local B=$(to_8 ${BASH_REMATCH[3]})
+      local CACHE_FILE_BASE="${R}_${G}_${B}"
+    fi
+
     echo -e "${IMG_IDX}\t${IMG_FILE}\t${IMG_DURATION}\t${IMG_COLOUR}\t${COLOUR_NAME}"
     LFN=$(basename ${IMG_FILE})
     MP4_NAME=MP4/"${LFN%.*}".mp4
@@ -124,7 +133,7 @@ function gen {
               ffmpeg -y -i "${MP4_NAME}" -frames:v 1 -vf scale=out_color_matrix=srgb=full_chroma_int+accurate_rnd,format=rgb48le ${CHECK_PNG} >> ffmpeg_debug.txt 2>&1
               local VID_RGB=$(convert ${CHECK_PNG} -crop 1x1+960+540 -depth ${BIT_DEPTH} -format "%[fx:int(${SCALE}*r+.5)],%[fx:int(${SCALE}*g+.5)],%[fx:int(${SCALE}*b+.5)]" info:-)
               echo -e "${MP4_NAME}\t${CHECK_PNG}\t${VID_RGB}\t${IMG_COLOUR}\t${ENCODE_TIME_SECS}" >> checker/verify.txt
-              check_output ${IMG_COLOUR} ${VID_RGB}
+              compare_colours ${IMG_COLOUR} ${VID_RGB}
           fi
         else
           echo "Skipping, output exists"
@@ -137,9 +146,14 @@ UPDATE_MODE=0
 EXTRA_SECS=2
 FIXED_SECS=0
 BIT_DEPTH=12
+CACHE_DIR=$(pwd)/cache
 
-while getopts ":ife:d:l:" opt; do
+while getopts ":c:ife:d:l:" opt; do
   case ${opt} in
+    c )
+      echo "Setting CACHE_DIR to ${OPTARG}"
+      CACHE_DIR="${OPTARG}"
+      ;;
     f )
       echo "Running in full update mode"
       UPDATE_MODE=1
@@ -200,6 +214,7 @@ then
     echo "error: $(pwd) has no input directory"
 fi
 
+mkdir -p "${CACHE_DIR}"
 mkdir -p HD
 mkdir -p checker
 mkdir -p MP4
