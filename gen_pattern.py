@@ -141,10 +141,10 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
             logger.info(f'RESULT: ROUNDING {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
         else:
             logger.warning(f'RESULT: ERROR {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
+        return patch_vid_abs, (r_10, g_10, b_10, check_r_10, check_g_10, check_b_10, delta_sum)
     else:
         raise ValueError(f'Failed to read RGB from {patch_check_abs}')
 
-    return patch_vid_abs, (r_10, g_10, b_10, check_r_10, check_g_10, check_b_10)
 
 
 def generate_pattern(patchset: str, path: Path, vids: List[str]):
@@ -191,7 +191,7 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
     else:
         with (path / 'verify.csv').open(mode='w') as f:
             v_csv = csv.writer(f)
-            v_csv.writerow(['idx', 'in_r', 'in_g', 'in_b', 'out_r', 'out_g', 'out_b'])
+            v_csv.writerow(['idx', 'in_r', 'in_g', 'in_b', 'out_r', 'out_g', 'out_b', 'delta'])
             for i, rgb in enumerate(rgbs):
                 v_csv.writerow([i] + list(rgb))
 
