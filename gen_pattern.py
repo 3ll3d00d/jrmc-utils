@@ -1,17 +1,17 @@
 import argparse
 import csv
 import logging
+import math
 import shlex
 import subprocess
-
-import math
-from pathlib import Path
-from typing import Optional, List, Tuple, Callable
-
 import sys
 import time
+from pathlib import Path
+from typing import Optional, List, Tuple
 
 logger = logging.getLogger()
+
+FPS = 25
 
 
 def as_grey(r: float, g: float, b: float) -> float:
@@ -52,8 +52,11 @@ def run_it(name: str, cmd: str, **kwargs) -> subprocess.CompletedProcess[str]:
         raise e
 
 
-def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame_count: int, force: bool) -> Tuple[
-    str, Tuple[float, ...]]:
+def chapter_duration(frame_count, fps) -> float:
+    return round(frame_count * (1.0 / fps), 3)
+
+
+def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame_count: int, force: bool) -> Tuple[str, Tuple[float, ...], str]:
     gamma_percent = greyscale_percent(r, g, b)
     grey = as_grey(r, g, b)
 
@@ -79,7 +82,7 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
 
     # text overlay
     if gamma_percent:
-        text_overlay = f'{idx + 1} - {round(gamma_percent * 100, 1):.4g}%'
+        text_overlay = f'{round(gamma_percent * 100, 1):.4g}%'
     else:
         # 8 bit for text overlay
         r_8 = round(r * 255)
@@ -100,8 +103,7 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
     patch_vid = patch_cache_dir / f'{r_10}_{g_10}_{b_10}.mp4'
 
     def do_it(f):
-        fps = 25
-        cmd = f"ffmpeg -y -framerate {fps} -i {patch_file_abs} -c:v libx265 -x265-params \"lossless=1\" -t {round(frame_count * (1.0 / fps), 3)} -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,drawtext=text='{text_overlay}':fontcolor={text_colour}:x=40:y=h-th-40:expansion=none:fontsize=36,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {f}"
+        cmd = f"ffmpeg -y -framerate {FPS} -i {patch_file_abs} -c:v libx265 -x265-params \"lossless=1\" -t {chapter_duration(frame_count, FPS)} -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,drawtext=text='{text_overlay}':fontcolor={text_colour}:x=40:y=h-th-40:expansion=none:fontsize=36,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {f}"
         before = time.time()
         run_it('MP4 generation', cmd)
         after = time.time()
@@ -141,12 +143,12 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
             logger.info(f'RESULT: ROUNDING {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
         else:
             logger.warning(f'RESULT: ERROR {delta_sum}: {check_r_10},{r_10},{check_g_10},{g_10},{check_b_10},{b_10}')
-        return patch_vid_abs, (r_10, g_10, b_10, check_r_10, check_g_10, check_b_10, delta_sum)
+        return patch_vid_abs, (r_10, g_10, b_10, check_r_10, check_g_10, check_b_10, delta_sum), text_overlay
     else:
         raise ValueError(f'Failed to read RGB from {patch_check_abs}')
 
 
-def generate_pattern(patchset: str, path: Path, vids: List[str], cache_dir: Path):
+def generate_pattern(patchset: str, path: Path, vids: List[str], cache_dir: Path, chapters: List[str]):
     # create the ffmpeg concat
     ffmpeg_concat = path / 'ffmpeg_input.txt'
     is_verify = path.parent.name == 'verify'
@@ -158,10 +160,18 @@ def generate_pattern(patchset: str, path: Path, vids: List[str], cache_dir: Path
                 f.write(f"file '{white}'\n")
         for vid in vids:
             f.write(f"file '{vid}'\n")
+    # create the metadata
+    ffmpeg_meta = path / 'ffmpeg_meta.txt'
+    with ffmpeg_meta.open('w') as f:
+        f.write(';FFMETADATA1')
+        f.write(f'title={patchset}')
+        f.write('artist=mk')
+        for c in chapters:
+            f.write(f'{c}\n')
     # create the vid
     patchset_vid = (path / f'{patchset}.mp4').absolute()
     logger.info(f'Concatenating {len(vids)} patches into {patchset_vid}')
-    run_it('Pattern gen', f'ffmpeg -y -f concat -safe 0 -i {ffmpeg_concat.absolute()} -c copy {patchset_vid}')
+    run_it('Pattern gen', f'ffmpeg -y -f concat -safe 0 -i {ffmpeg_concat.absolute()} -i {ffmpeg_meta.absolute()} -map_metadata 1 -c copy {patchset_vid}')
 
 
 def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force: bool):
@@ -172,10 +182,11 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
     patch_def_name = f'{set_name}_100.csv'
     patch_def_file = path / patch_def_name
     patch_def_file.resolve(strict=True)
-    failed = []
+    failed: List[int] = []
     success = 0
-    vids = []
+    vids: List[str] = []
     rgbs: List[Tuple[float, ...]] = []
+    chapters: List[str] = []
     with patch_def_file.open() as f:
         patch_reader = csv.reader(f)
         for row in patch_reader:
@@ -184,10 +195,16 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
             g = float(row[2]) / 100.0
             b = float(row[3]) / 100.0
             try:
-                vid, rgb = process_patch(idx, r, g, b, cache_dir, frame_count, force)
+                vid, rgb, txt_overlay = process_patch(idx, r, g, b, cache_dir, frame_count, force)
                 vids.append(vid)
                 rgbs.append(rgb)
+                chapters.append('[CHAPTER]')
+                chapters.append('TIMEBASE=1/1000')
+                chapters.append(f'START={success * (chapter_duration(frame_count, FPS) * 1000):.0f}')
                 success = success + 1
+                chapters.append(f'END={(success * (chapter_duration(frame_count, FPS) * 1000)) - 1:.0f}')
+                chapters.append(f'title={success} - {txt_overlay}')
+                chapters.append('')
             except:
                 failed.append(idx)
 
@@ -200,7 +217,7 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
             for i, rgb in enumerate(rgbs):
                 v_csv.writerow([i] + list(rgb))
 
-        generate_pattern(set_name, path, vids, cache_dir)
+        generate_pattern(set_name, path, vids, cache_dir, chapters)
         logger.info(f'Processed patchset: {patchset_path}')
 
 
@@ -223,12 +240,15 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    failed = False
+    failed = []
     for ps in args.patchsets:
         try:
             process_patchset(ps, args.cache_dir, args.fps, args.force)
         except:
             logger.exception(f'Patchset failed: {ps}')
-            failed = True
-
-    sys.exit(1 if failed else 0)
+            failed.append(ps)
+    if failed:
+        logger.warning(f'{len(failed)} patch sets failed: {", ".join(failed)}')
+        sys.exit(1)
+    else:
+        sys.exit(0)
