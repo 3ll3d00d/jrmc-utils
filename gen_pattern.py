@@ -86,7 +86,7 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
         g_8 = round(g * 255)
         b_8 = round(b * 255)
 
-        text_overlay = f'{idx + 1} - ({r_8},{g_8},{b_8})'
+        text_overlay = f'{r_8},{g_8},{b_8}'
 
     # text colour
     if grey < 0.5:
@@ -144,7 +144,6 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
         return patch_vid_abs, (r_10, g_10, b_10, check_r_10, check_g_10, check_b_10, delta_sum)
     else:
         raise ValueError(f'Failed to read RGB from {patch_check_abs}')
-
 
 
 def generate_pattern(patchset: str, path: Path, vids: List[str], cache_dir: Path):
