@@ -147,10 +147,16 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
 
 
 
-def generate_pattern(patchset: str, path: Path, vids: List[str]):
+def generate_pattern(patchset: str, path: Path, vids: List[str], cache_dir: Path):
     # create the ffmpeg concat
     ffmpeg_concat = path / 'ffmpeg_input.txt'
+    is_verify = path.parent.name == 'verify'
+    white = str((cache_dir / '1023_1023_1023/1023_1023_1023.mp4').absolute())
+    white_patches = 4 if vids[0] != white else 3
     with ffmpeg_concat.open('w') as f:
+        if is_verify:
+            for _ in range(white_patches):
+                f.write(f"file '{white}'\n")
         for vid in vids:
             f.write(f"file '{vid}'\n")
     # create the vid
@@ -195,7 +201,7 @@ def process_patchset(patchset_path: str, cachedir: str, frame_count: int, force:
             for i, rgb in enumerate(rgbs):
                 v_csv.writerow([i] + list(rgb))
 
-        generate_pattern(set_name, path, vids)
+        generate_pattern(set_name, path, vids, cache_dir)
         logger.info(f'Processed patchset: {patchset_path}')
 
 
