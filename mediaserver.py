@@ -1,6 +1,6 @@
 import sys
 import urllib
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Union
 from xml.etree import ElementTree as et
 
 import requests
@@ -50,36 +50,39 @@ class MediaServer:
         if not self.connected:
             self.authenticate()
 
-    def search(self, film_name: str, exact: bool = False) -> dict:
-        self.__auth_if_required()
-        url = f"{self.__base_url}/Files/Search"
+    def search_by_name(self, film_name: str, exact: bool = False) -> dict:
+        match = None
         if exact:
             film_name = f"[{film_name}]"
+        results = self.search(f'[Name]={film_name}', 'Filename,Name,Key,Borrowed')
+        if len(results) > 1:
+            if not exact:
+                match = self.search(f'[Name]=[{film_name}]', 'Filename,Name,Key,Borrowed')
+                if not match:
+                    print(f"NO MATCH for \"{film_name}\", {len(results)} candidates", file=sys.stderr)
+            else:
+                match = results[0]
+        elif not exact:
+            if ' ' in film_name:
+                self.search_by_name(film_name, exact=True)
+            else:
+                print(f"NO MATCH for \"{film_name}\", 0 candidates", file=sys.stderr)
+        return match
+
+    def search(self, src_query: str, fields: str) -> Optional[Union[dict, list]]:
+        self.__auth_if_required()
+        url = f"{self.__base_url}/Files/Search"
         params = urllib.parse.urlencode({
             'Action': 'json',
-            'Fields': 'Filename,Name,Key,Borrowed',
-            'Query': f'[Name]={film_name} [Media Type]=Video [Media Sub Type]=Movie'
+            'Fields': fields,
+            'Query': f'{src_query} [Media Type]=Video [Media Sub Type]=Movie'
         }, quote_via=urllib.parse.quote)
         r = self.__session.get(url, auth=self.__auth, timeout=(1, 5), params=params)
-        match = None
         if r.status_code == 200:
-            results = r.json()
-            if results:
-                if len(results) > 1:
-                    if not exact:
-                        match = self.search(film_name, exact=True)
-                        if not match:
-                            print(f"NO MATCH for \"{film_name}\", {len(results)} candidates", file=sys.stderr)
-                else:
-                    match = results[0]
-            elif not exact:
-                if ' ' in film_name:
-                    self.search(film_name, exact=True)
-                else:
-                    print(f"NO MATCH for \"{film_name}\", 0 candidates", file=sys.stderr)
+            return r.json()
         else:
             print(f"Unexpected response {r}")
-        return match
+            return None
 
     def set_value(self, key: str, field: str, value: str):
         self.__auth_if_required()

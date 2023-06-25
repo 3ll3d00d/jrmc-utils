@@ -102,14 +102,22 @@ def process_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame
     # create video
     patch_vid = patch_cache_dir / f'{r_10}_{g_10}_{b_10}.mp4'
 
+    duration = chapter_duration(frame_count, FPS)
+
     def do_it(f):
-        cmd = f"ffmpeg -y -framerate {FPS} -i {patch_file_abs} -c:v libx265 -x265-params \"lossless=1\" -t {chapter_duration(frame_count, FPS)} -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,drawtext=text='{text_overlay}':fontcolor={text_colour}:x=40:y=h-th-40:expansion=none:fontsize=36,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {f}"
+        cmd = f"ffmpeg -y -framerate {FPS} -i {patch_file_abs} -c:v libx265 -x265-params \"lossless=1\" -t {duration} -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,drawtext=text='{text_overlay}':fontcolor={text_colour}:x=40:y=h-th-40:expansion=none:fontsize=36,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {f}"
         before = time.time()
         run_it('MP4 generation', cmd)
         after = time.time()
         logger.info(f'Created {f} in {round(after - before, 3)}s')
 
     patch_vid_abs = run_if_necessary(patch_vid, force, do_it)
+
+    # check duration
+    resp = run_it('duration', f"ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 {patch_vid_abs}", capture_output=True)
+    d = float(resp.stdout.decode().replace('\n', '').strip())
+    if not math.isclose(d, duration):
+        logger.error(f"{patch_vid_abs} should be {duration} but is {d}")
 
     # convert back to png
     patch_check = patch_cache_dir / f'{r_10}_{g_10}_{b_10}.check.png'
@@ -165,7 +173,7 @@ def generate_pattern(patchset: str, path: Path, vids: List[str], chapters: List[
     # create the vid
     patchset_vid = (path / f'{patchset}.mp4').absolute()
     logger.info(f'Concatenating {len(vids)} patches into {patchset_vid}')
-    run_it('Pattern gen', f'ffmpeg -y -f concat -safe 0 -i {ffmpeg_concat.absolute()} -i {ffmpeg_meta.absolute()} -map_metadata 1 -c copy {patchset_vid}')
+    run_it('Pattern gen', f'ffmpeg -y -f concat -safe 0 -i {ffmpeg_concat.absolute()} -i {ffmpeg_meta.absolute()} -map_chapters 1 -c copy {patchset_vid}')
 
 
 def do_patch(idx: int, r: float, g: float, b: float, cache_dir: Path, frame_count: int, force: bool, vids: List[str],
