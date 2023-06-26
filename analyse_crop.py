@@ -11,9 +11,10 @@ if __name__ == '__main__':
     real_p = sys.argv[5]
     fields = 'Filename (path),Filename (name),Name'
     results = mc.search('[Dimensions]=[1920 x 1080],[3840 x 2160] -[Video Crop]=[],[0x0x0x0]', fields)
-    out_cols = 'name,limit,skip,ffmpeg_crop,mc_crop'
+    out_cols = 'name,limit,skip,ffmpeg_crop,mc_crop,diff,no ffmpeg crop,no mc crop,no crop'
     print(out_cols)
     out_data = []
+    sensitive = []
     for res in results:
         res['Filename (path)'] = res['Filename (path)'].replace(lib_p, real_p).replace('\\', '/')
 
@@ -37,8 +38,15 @@ if __name__ == '__main__':
                             mc_crop = r[cols['mc_crop']]
                 popular_crops = sorted(unique_crop_counts.items(), key=lambda x: x[1], reverse=True)
                 if popular_crops:
-                    out_data.append([res["Name"], limit, skip, popular_crops[0][0], mc_crop])
-                    print(','.join(out_data[-1]))
+                    pop_crop = popular_crops[0][0]
+                    vals = [res["Name"], limit, skip, pop_crop, mc_crop]
+                    # diff,no ffmpeg crop,no mc crop,no crop
+                    vals.append(str(pop_crop != mc_crop))
+                    vals.append(str(pop_crop[:4] == '0x0x'))
+                    vals.append(str(mc_crop[:4] == '0x0x'))
+                    vals.append(str(vals[-2] and vals[-1]))
+                    out_data.append(vals)
+                    print(','.join(vals))
                 else:
                     print(f"No Crops in {crop}")
 
