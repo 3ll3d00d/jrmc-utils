@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from mediaserver import MediaServer
@@ -48,7 +49,7 @@ def crop(res, skip, limit):
     for i in [5, 12, 22, 38, 42]:
         pad_i = f'0{i}' if i < 10 else i
         lines = run_it('cropdetect',
-                       f'ffmpeg -ss 00:{pad_i}:00 -t 2 -i "{fn.path}" -vf cropdetect=skip={skip}:limit={limit} -f null -',
+                       f'ffmpeg -ss 00:{pad_i}:00 -t 2 -i "{fn.path}" -vf cropdetect=skip={skip}:limit={limit/255} -f null -',
                        stderr=subprocess.STDOUT).decode().split('\n')
         crops = [l.split(' ') for l in lines if 'crop' in l]
         if crops:
@@ -62,7 +63,7 @@ def crop(res, skip, limit):
                     'x': crop[2],
                     'y': crop[3],
                     'crop': f'{crop[2]}x{crop[3]}x{crop[2] + crop[0]}x{crop[3] + crop[1]}',
-                    'ar': f'{crop[0] / crop[1]:.2f}'
+                    'ar': f'{crop[0] / crop[1]:.2f}' if crop[1] else '0'
                 })
         else:
             logger.warning(f'[{res["Name"]}] No crop info found in {fn.path} at 00:{pad_i}:00')
@@ -97,6 +98,8 @@ if __name__ == '__main__':
     results = mc.search('[Dimensions]=[1920 x 1080],[3840 x 2160] -[Video Crop]=[],[0x0x0x0]', fields)
     skips = [24, 8]
     limits = [18, 25]
+    min_mtime = float(datetime(2023, 6, 26, 16, 0, 0).strftime('%s'))
+
     for res in results:
         if 'Aspect Ratio' not in res:
             logger.info(f'Ignoring {res}')
@@ -108,8 +111,13 @@ if __name__ == '__main__':
             for limit in limits:
                 output_file = Path(res['Filename (path)']) / f'crop_{limit}_{skip}.csv'
                 if output_file.exists():
-                    logger.info(f'Skipping {res["Filename (path)"]}, crop data already present')
-                    continue
+                    mtime = output_file.stat().st_mtime
+                    delta = mtime - min_mtime
+                    if delta > 0:
+                        logger.info(f'Skipping {res["Filename (path)"]}, recent crop data already present')
+                        continue
+                    else:
+                        logger.info(f'Overwriting {output_file}, last modified at {datetime.fromtimestamp(mtime).strftime("%c")}')
 
                 try:
                     if res['File Type'] == 'bdmv':

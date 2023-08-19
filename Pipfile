@@ -8,6 +8,8 @@ requests = "*"
 pandas = "*"
 jupyterlab = "*"
 notebook = "*"
+pypng = "*"
+colour-science = {extras = ["optional"], version = "*"}
 
 [dev-packages]
 
