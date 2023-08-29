@@ -10,6 +10,7 @@ jupyterlab = "*"
 notebook = "*"
 pypng = "*"
 colour-science = {extras = ["optional"], version = "*"}
+matplotlib = "*"
 
 [dev-packages]
 
