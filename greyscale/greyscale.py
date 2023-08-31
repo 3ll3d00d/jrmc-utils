@@ -1,9 +1,11 @@
 import os.path
 import shlex
 import subprocess
+
+import numpy as np
 import png
 
-from colour.models import eotf_inverse_ST2084
+from colour.models import eotf_inverse_ST2084, eotf_ST2084
 
 
 def encode(cmd: str, file_1: str, file_60: str):
@@ -19,6 +21,13 @@ def encode(cmd: str, file_1: str, file_60: str):
         print(cmd)
         shlex.split(cmd)
         subprocess.run(shlex.split(cmd), check=True)
+
+
+m1 = 2610 / 16384
+m2 = 2523 / 4096 * 128
+c1 = 3424 / 4096
+c2 = 2413 / 4096 * 32
+c3 = 2392 / 4096 * 32
 
 
 w = 3840
@@ -42,16 +51,24 @@ panel_width = int(w / len(cols))
 width_padding = w - (panel_width * len(cols))
 
 row = []
+eotf_y_values = []
 for patch_num in cols:
     pq_val = s_max / 100 * patch_num
     multiplier = rgb_max_value
     rgb_value = int(pq_val * multiplier)
-    print(f'{patch_num},{rgb_value},{pq_val:.6g}')
     rgb_triplet = [rgb_value] * 3
     column_width = panel_width + (0 if patch_num != len(cols) - 1 else width_padding)
     pixels = rgb_triplet * column_width
     row.extend(pixels)
+
+    eotf_y = eotf_ST2084(pq_val)
+    eotf_y_values.extend([eotf_y] * column_width)
+    print(f'{patch_num},{rgb_value},{eotf_y:.6g}')
+
+print(f'{np.mean(np.array(eotf_y_values))}')
+
 pixels = [row for _ in range(h)]
+
 
 # one line version
 # row = [v for g in cols for v in
@@ -70,10 +87,9 @@ vf_params = f"scale=out_color_matrix=bt2020:out_h_chr_pos=0:out_v_chr_pos=0,form
 hdr_file_1 = f'greyscale_{steps}_{max_nits}_1.mkv'
 cmd = f"ffmpeg -y -framerate 24000/1001 -i {ramp_file} -c:v libx265 -x265-params \"{x265_params}\" -t 1 -vf \"{vf_params}\" {hdr_file_1}"
 
-encode(cmd, hdr_file_1,f'greyscale_{steps}_{max_nits}.mkv')
+encode(cmd, hdr_file_1, f'greyscale_{steps}_{max_nits}.mkv')
 
 sdr_file_1 = f'greyscale_{steps}_{max_nits}_sdr_1.mkv'
 cmd = f"ffmpeg -y -framerate 24000/1001 -i {ramp_file} -c:v libx265 -x265-params \"lossless=1\" -t 1 -vf \"colorspace=all=bt709:iall=bt601-6-625:fast=1:format=yuv420p10,loop=-1:1\" -colorspace 1 -color_primaries 1 -color_trc 1 -sws_flags accurate_rnd+full_chroma_int {sdr_file_1}"
 
-encode(cmd, sdr_file_1,f'greyscale_{steps}_{max_nits}_sdr.mkv')
-
+encode(cmd, sdr_file_1, f'greyscale_{steps}_{max_nits}_sdr.mkv')

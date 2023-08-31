@@ -11,6 +11,7 @@ notebook = "*"
 pypng = "*"
 colour-science = {extras = ["optional"], version = "*"}
 matplotlib = "*"
+pillow = "*"
 
 [dev-packages]
 
